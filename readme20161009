@@ -1,0 +1,464 @@
+#### [手把手教程][JavaWeb]优雅的SSM应用（三）
+
+文章正式改名为：[手把手教程][JavaWeb]优雅的SSM应用
+
+这几天一直在踩坑，为什么这么说呢，主要是一直自己没找到优雅的方式来实现一些东西。
+
+虽然说前面也做了一些功能模块，但是总感觉不对劲，毕竟也是刚转做后端。
+
+后面朋友给了我一些他们公司同事写的demo，虽然说不上是牛逼的作品，但是确实符合我现在的需要。毕竟人家的实现方式也是经过实战项目演练出来的。
+
+- 再次安利一波,博客地址:[acheng1314.cn](http://acheng1314.cn/)
+
+#### 工具
+- IDE为**idea15**
+- JDK环境为**1.8**
+- maven版本为**maven3**
+- Mysql版本为**5.5.27**
+- Tomcat版本为**7.0.52**
+- 流程图绘制（xmind）
+
+#### 本期目标
+- 仓库管理系统的登录注册模块实现
+- 其他一些开发细节的体现
+- 功能模块分层设计的具体实现
+
+
+#### 其他
+- 我这姑且算是文章吧，文章都是先用有道云笔记写的，然后在简书上面查看有没有冲突，最后再放到稀土掘金上面
+- 但是稀土掘金上面文章出问题了，反馈上去也没能解决，本来想抓包看看他们的数据的，后面还是没做
+- **···**其他想说的就太多了，但都是不是今天的主题。
+
+#### 注册
+
+首先，我们webapp要实现用户登录，必须得能新建用户。所以，我们先把注册用户放在前面。
+
+- 预期功能：
+    - 打开注册页面
+    - 填写注册信息
+    - 点击注册
+    - 显示注册后的提示信息
+    
+有了功能后，我们就能大概明白我们是想要一个什么样子的注册模块了。
+- 一个web注册页面
+- web页面能进行基本的数据效验
+- 服务器能存储用户的注册信息
+- 注册动作完成后，返回提示页面。
+
+一般的，我们在开发中，有了大概样子的功能模块，我们需要整理一下业务流程和程序执行流程（在企业开发中，有项目经理的话，一般这些都是他们整理出来的，我们只需要开发实现就行。）经过一番挠头，大概的流程图如下所示：
+
+![ssm应用三-注册流程](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用三-注册流程.png)
+
+上图说明：
+- 我们在web页面完成注册信息的填写后，我们需要在web页面做一些基本的数据效验。当然后面我们会演示。
+- 注册信息通过基本的验证后，我们直接提交到服务器，**tomact → servelt → spring** 。我们的后端程序，一切都被spring接管了，所以，我们需要在spring中完成这些功能。
+- spring和外界通信，我们都是在Controller中完成。所以我们在Controller中处理数据。
+- 当数据通过了Controller中的校验后，我们需要在Controller中来查找数据库是否存在同样的用户名，**通用的数据操作流程如：Controller → Service → Dao**。
+- 前面我们提到过，**Service是为我们的程序提供服务的，我们尽量每个Service对应一个Dao，这样我们只需要提供单一的数据驱动，在外层进行业务组装**，这样就能达到我们的目的，同样的，我们这样也能将程序[**解耦**](http://blog.csdn.net/hb0746/article/details/7410524)，以后的维护也就相对简单了。
+
+好的，我们上面已经把思路想明白了。现在我们接着就开始实战。
+
+- 生成注册页面的连接。
+
+我们要生成一个连接，经过查找资料，我们知道我们需要创建一个Controller的类。代码如下：
+
+```
+@Controller
+@RequestMapping("/mvc")
+public class MainController {
+
+    /**
+     * 登陆页面
+     * @return
+     */
+    @RequestMapping(value = "/login",method = RequestMethod.GET)
+    public String login(){
+        return "login";
+    }
+
+}
+
+```
+
+在上面我们使用了@Controller和@RequestMapping("/mvc")注解。[详细资料点这里。](https://my.oschina.net/zhdkn/blog/316530)
+
+通俗的来说，我们需要在我们前面配置的Controller路径中，建立**使用@Controller的注解的类**告诉Spring这是一个控制器。
+
+```
+在类上面的 @RequestMapping("/mvc") ，是说明这个类的访问地址是 /mvc 。
+
+在方法上面的 @RequestMapping(value = "/login",method = RequestMethod.GET) ，是说明我这个方法的访问地址是 /mvc/login ，请求方式是http请求的get方式。
+
+这里我的方法是String方法，则是直接返回一个web页面的名字。
+
+当然，我们并不需要说直接去设定某个jsp文件。我们需要的是在这里指定好名称，然后使用对应的自动完成就能创建出那个jsp文件。
+
+然后我们直接在jsp文件中填写对应的代码就行了。
+```
+
+好的，基本的东西我们都说了，那么我们先去百度找一个登录界面（一定要能看，不能那啥太直接的粗糙的东西，毕竟我们都是有品位的人）。如下图：
+
+![ssm应用三-登录注册页面](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用三-登录注册.png)
+
+上面的图中样子还不错的样子，同时他们还是同一个页面，这下就很nice了，又可以少写一个界面了。
+
+按照前面两期我们的东西综合起来，我们需要先**把CSS、JS、图片等东西，扔到我们的静态目录中**。如下图所示：
+
+![ssm应用三-登录注册静态资源](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用三-登录注册静态资源.png)
+
+接着我们把登录的html的页面的东西，全部放到login.jsp中。如下：
+
+```
+<%@ page language="java" import="java.util.*" pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+
+<%-- 上面这两行是java代码的引用 --%>
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<script type="text/javascript" src="/static/js/jquery-3.1.1.min.js"></script>
+
+<head>
+    <title>仓库管理系统→登录</title>
+
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script type="text/javascript" src="/static/js/login.js"></script>
+    <link href="/static/css/login2.css" rel="stylesheet" type="text/css"/>
+</head>
+<html>
+<body>
+
+<h1>仓库管理系统登陆注册<sup>2016</sup></h1>
+
+<div class="login" style="margin-top:50px;">
+
+    <div class="header">
+        <div class="switch" id="switch"><a class="switch_btn_focus" id="switch_qlogin" href="javascript:void(0);"
+                                           tabindex="7">快速登录</a>
+            <a class="switch_btn" id="switch_login" href="javascript:void(0);" tabindex="8">快速注册</a>
+
+            <div class="switch_bottom" id="switch_bottom" style="position: absolute; width: 64px; left: 0px;"></div>
+        </div>
+    </div>
+
+
+    <div class="web_qr_login" id="web_qr_login" style="display: block; height: 235px;">
+
+        <!--登录-->
+        <div class="web_login" id="web_login">
+
+
+            <div class="login-box">
+
+
+                <div class="login_form">
+                    <form action="<%=request.getContextPath()%>/userAction/login" name="loginform"
+                          accept-charset="utf-8" id="login_form" class="loginForm"
+                          method="post"><input type="hidden" name="did" value="0"/>
+                        <input type="hidden" name="to" value="log"/>
+
+                        <div class="uinArea" id="uinArea">
+                            <label class="input-tips" for="u">帐号：</label>
+
+                            <div class="inputOuter" id="uArea">
+
+                                <input type="text" id="u" name="loginId" class="inputstyle"/>
+                            </div>
+                        </div>
+                        <div class="pwdArea" id="pwdArea">
+                            <label class="input-tips" for="p">密码：</label>
+
+                            <div class="inputOuter" id="pArea">
+
+                                <input type="password" id="p" name="pwd" class="inputstyle"/>
+                            </div>
+                        </div>
+
+                        <div style="padding-left:50px;margin-top:20px;">
+                            <input type="submit" value="登 录"
+                                   style="width:150px;"
+                                   class="button_blue"/></div>
+                    </form>
+                </div>
+
+            </div>
+
+        </div>
+        <!--登录end-->
+    </div>
+
+    <!--注册-->
+    <div class="qlogin" id="qlogin" style="display: none; ">
+
+        <div class="web_login">
+            <form name="form2" id="regUser" accept-charset="utf-8" action="<%=request.getContextPath()%>/userAction/reg"
+                  method="post">
+                <input type="hidden" name="to" value="reg"/>
+                <input type="hidden" name="did" value="0"/>
+                <ul class="reg_form" id="reg-ul">
+                    <div id="userCue" class="cue">快速注册请注意格式</div>
+                    <li>
+
+                        <label for="user" class="input-tips2">用户名：</label>
+
+                        <div class="inputOuter2">
+                            <input type="text" id="user" name="loginId" maxlength="16" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+                    <li>
+
+                        <label for="user" class="input-tips2">姓名：</label>
+
+                        <div class="inputOuter2">
+                            <input type="text" id="name" name="name" maxlength="16" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+
+                    <li>
+                        <label for="passwd" class="input-tips2">密码：</label>
+
+                        <div class="inputOuter2">
+                            <input type="password" id="passwd" name="pwd" maxlength="16" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+                    <li>
+                        <label for="passwd2" class="input-tips2">确认密码：</label>
+
+                        <div class="inputOuter2">
+                            <input type="password" id="passwd2" name="" maxlength="16" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+
+                    <li>
+                        <label for="cellNumber" class="input-tips2">手机号：</label>
+
+                        <div class="inputOuter2">
+
+                            <input type="text" id="cellNumber" name="cellNumber" maxlength="18" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+
+                    <li>
+                        <label for="sex" class="input-tips2">性别：</label>
+
+                        <div class="inputOuter2">
+
+                            <input type="text" id="sex" name="sex" maxlength="18" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+
+                    <li>
+                        <label for="age" class="input-tips2">年龄：</label>
+
+                        <div class="inputOuter2">
+
+                            <input type="age" id="age" name="age" maxlength="18" class="inputstyle2"/>
+                        </div>
+
+                    </li>
+
+                    <li>
+                        <div class="inputArea">
+                            <input type="button" id="reg" style="margin-top:10px;margin-left:85px;" class="button_blue"
+                                   value="同意协议并注册"/> <a href="#" class="zcxy" target="_blank">注册协议</a>
+                        </div>
+
+                    </li>
+                    <div class="cl"></div>
+                </ul>
+            </form>
+
+
+        </div>
+
+
+    </div>
+    <!--注册end-->
+</div>
+<div class="jianyi">*推荐使用ie8或以上版本ie浏览器或Chrome内核浏览器访问本站</div>
+
+</body>
+</html>
+
+```
+
+上面的网页代码中的东西，我们也可以不求甚解，只要会调用就行。调用地址是在我们的form表单的action那里填写我们的服务器地址。这里我们甚至可以做前后端分离，用纯粹的html+js来调用Api接口实现前后端分离。
+
+```
+action="<%=request.getContextPath()%>/userAction/reg" method="post"
+
+<%=request.getContextPath()%> 这是指向我们应用的根路径
+
+mothod是说明我们请求的方式，我们这里才用了post，至于其他的方法就不一一介绍了，详细信息请百度查找“ http请求 ”
+
+form表单中，每个input的name我们需要和后端的接口那边的字段对应。
+
+当我们的字段对应后，spring可以自动把请求的内容转换为适应的对象。
+
+小提示：我们可以直接debug我们的程序，只要取消断点程序就可以顺序执行，加入断点只要程序流转到那里，他就会自动调试。
+```
+
+当然，我们的jsp写完后，我们需要给我们的表单请求那里指定请求路径。由于上面我已经指定了路径，所以我们需要在对应的路径创建请求的接口（实际开发中都是先写好请求接口，再让程序调用。由于我这里是提前写好的，所以这里我们得照着路径写代码）。
+
+我们在Controller目录下创建一个UserController类，代码内容如下：
+
+```
+package cn.acheng1314.mvc.controller;
+
+import cn.acheng1314.domain.ResponseObj;
+import cn.acheng1314.domain.User;
+import cn.acheng1314.exception.*;
+import cn.acheng1314.service.serviceImpl.UserServiceImpl;
+import cn.acheng1314.utils.GsonUtils;
+import cn.acheng1314.utils.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.ModelMap;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.servlet.ModelAndView;
+
+import javax.servlet.http.HttpServletRequest;
+
+/**
+ * 用户请求相关控制器
+ * <br/>Created by acheng on 2016/9/26.
+ */
+@Controller
+@RequestMapping("/userAction")
+public class UserController {
+
+    @Autowired
+    private UserServiceImpl userService;    //自动载入Service对象
+    private ResponseObj responseObj;    //bean对象
+    
+    /**
+     * 为什么返回值是一个ModelAndView，ModelAndView代表一个web页面<br/>
+     * setViewName是设置一个jsp页面的名称
+     * @param req   http请求
+     * @param user  发起请求后，spring接收到请求，然后封装的bean数据
+     * @return  返回一个web页面
+     * @throws Exception    
+     */
+    @RequestMapping(value = "/reg", method = RequestMethod.POST)
+    public ModelAndView reg(HttpServletRequest req, User user) throws Exception {
+        ModelAndView mav = new ModelAndView();  //创建一个jsp页面对象
+        mav.setViewName("home");    //设置JSP文件名
+        if (null == user) {
+            mav.addObject("message", "用户信息不能为空！");  //加入提示信息，在jsp中我们直接使用${对象名称}就能获取对应的内容
+            return mav; //返回页面
+        }
+        if (StringUtils.isEmpty(user.getName()) || StringUtils.isEmpty(user.getPwd())) {
+            mav.addObject("message", "用户名或密码不能为空！");
+            return mav;
+        }
+        if (null != userService.findUser(user)) {
+            mav.addObject("message", "用户已经存在！");
+            return mav;
+        }
+        try {
+            userService.add(user);
+        } catch (Exception e) {
+            e.printStackTrace();
+            mav.addObject("message", "错误：用户其他信息错误");
+            return mav;
+        }
+        mav.addObject("code", 110);
+        mav.addObject("message", "恭喜。注册成功");
+        req.getSession().setAttribute("user", user);
+        return mav;
+    }
+
+    /**
+     * 登录接口
+     * @param req
+     * @param user
+     * @return
+     */
+    @RequestMapping(value = "/login", method = RequestMethod.POST, produces = {
+            "application/json; charset=utf-8"})
+    @ResponseBody
+    public ModelAndView login(HttpServletRequest req, User user) {
+        ModelAndView mav = new ModelAndView("home");
+        String result;
+        if (null == user) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.EMPUTY);
+            responseObj.setMsg("登录信息不能为空");
+            result = GsonUtils.gson.toJson(responseObj);    //转换的json数据
+            mav.addObject("result", result);
+            return mav; //返回页面
+        }
+        if (StringUtils.isEmpty(user.getLoginId()) || StringUtils.isEmpty(user.getPwd())) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("用户名或密码不能为空");
+            result = GsonUtils.gson.toJson(responseObj);
+            mav.addObject("result", result);
+            return mav;
+        }
+        //查找用户
+        User user1 = userService.findUser(user);
+        if (null == user1) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.EMPUTY);
+            responseObj.setMsg("未找到该用户");
+            result = GsonUtils.gson.toJson(responseObj);
+        } else {
+            if (user.getPwd().equals(user1.getPwd())) {
+                responseObj = new ResponseObj<User>();
+                responseObj.setCode(ResponseObj.OK);
+                responseObj.setMsg(ResponseObj.OK_STR);
+                result = GsonUtils.gson.toJson(responseObj);
+            } else {
+                responseObj = new ResponseObj<User>();
+                responseObj.setCode(ResponseObj.FAILED);
+                responseObj.setMsg("用户密码错误");
+                result = GsonUtils.gson.toJson(responseObj);
+            }
+        }
+        mav.addObject("result", result);
+        return mav;
+    }
+
+}
+
+```
+
+当然很多数据效验我们不能只在后端做，我们需要将数据检查的粒度细化。
+
+不但要在后端做，而且我们的前端页面也要做的，比如说手机号、邮箱帐号、用户名规则等等，用的最多的也就是web页面上面拿到数据用js来判断，使用[正则表达式](http://baike.baidu.com/link?url=tw3uQ7hzZQaXrKAz5EU700k9mZuE-2H3TvkLFYsZ2yjANLB0sVlnj-Ig7L0E8SwTf9gI-f_N65ud7tL3RW_SzD_bI6A7ozb7PNspH8aniRACUiYm16gl_NJ2RecEyzgmEdzLG6h3FftX1Ax0vXGLxK)来判断是否符合标准。
+
+具体的js我也就不写了，因为我也不是很了解JS，只能对着别人写的自己来做修改==
+
+![蘑菇头-好伤心](http://imgsrc.baidu.com/forum/w=580/sign=8e7ed72518178a82ce3c7fa8c602737f/e61fb7003af33a87e5082df3c05c10385243b593.jpg)
+
+好的，我们现在已经把东西都弄完了，debug开启程序，然后加入断点调试。运行结果如下：
+
+![ssm应用三-注册页面和调试](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用三-注册页面和调试.png)
+
+这样我们现在能拿到对应的数据，并且在Controller中加入了数据校验。同时，我们的web页面中也加入了js验证。
+
+现在我们的注册页面也可以了，功能也有了。既然如此，我们应该接着把登录页面做成功，但是我们已经有了这个的思路，那么剩下的只需要依样画瓢就能完成。
+
+具体的东西，都已经在后面的代码中贴出来了。详情请看github：
+
+项目地址：[点击访问github](https://github.com/pc859107393/SpringMvcMybatis/tree/master)
+
+总结：
+- URL生成
+- 注册登录完成
+- 简单的前端验证（在代码包中可以看到）
+- form表单提交
+- http请求
+- 功能模块分析
+- 流程图（使用xmind制作）
+
+
+下期预告：完整的后台主页，前端使用json数据，列表数据分页。 
