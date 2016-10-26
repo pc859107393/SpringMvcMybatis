@@ -1,0 +1,343 @@
+#### 优雅的SpringMvc+Mybatis应用（五）
+
+转眼间文章已经到了第五期了。这段时间一直在考虑考研的事情，周一请老师吃饭还喝醉了，到家就直接睡着了。十分抱歉。
+
+本来这次是攒着劲头要写很多东西，但是十分尴尬的事情是最近身边的事情太多了，十分抱歉，该做的事情，我一定不会推诿的，大家理解一下。谢谢你们的支持。
+
+感谢热心亲们的支持，你们的鼓励我才走到今天，很多时候感觉自己写代码还是经常踩坑，所以思前想后，问了些朋友。大家都让我建群，一起交流才是最快的进步。所以我们的QQ群开通了，扫描二维码：
+
+![行走的java全栈](http://acheng1314.cn/wp-content/uploads/2016/10/行走的java全栈群二维码.png)
+
+#### 工具
+- IDE为**idea16**
+- JDK环境为**1.8**
+- ~~maven版本为**maven3**~~
+- gradle构建，版本：2.14.1
+- Mysql版本为**5.5.27**
+- Tomcat版本为**7.0.52**
+- 流程图绘制（xmind）
+
+#### 本期目标
+- 简单更改项目的构建工具
+- 列表分页
+- 简易用户角色控制
+- 拦截器的使用
+
+#### 简单更改项目的构建工具
+最近发现电脑突然变得很卡，所以专门把系统清理，顺带把Idea升级为16。接着事情就来了，发现在idea16里面能把项目升级为gradle构建，一番升级后，项目突然不能运行==，那么问题来了。整了半天也没发现问题所在，百度、谷歌也没找到答案，然后放出大招：
+
+- 新建同样包名和项目名称的gradle构建的web工程
+- 把上一个项目中gradle自动生成的build.gradle中的支援库代码拷贝下来，如下：
+```
+compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.1.1'
+compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.6'
+compile group: 'com.alibaba', name: 'druid', version: '1.0.25'
+compile group: 'org.mybatis', name: 'mybatis', version: '3.4.1'
+compile group: 'org.mybatis', name: 'mybatis-spring', version: '1.3.0'
+compile group: 'taglibs', name: 'standard', version: '1.1.2'
+compile group: 'jstl', name: 'jstl', version: '1.2'
+compile group: 'com.google.code.gson', name: 'gson', version: '2.7'
+compile group: 'javax.servlet', name: 'javax.servlet-api', version: '3.1.0'
+compile group: 'org.springframework', name: 'spring-core', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-beans', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-context', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-jdbc', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-tx', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-web', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-webmvc', version: '4.3.2.RELEASE'
+compile group: 'org.springframework', name: 'spring-test', version: '4.3.2.RELEASE'
+compile group: 'redis.clients', name: 'jedis', version: '2.7.3'
+compile group: 'com.dyuproject.protostuff', name: 'protostuff-core', version: '1.0.8'
+compile group: 'com.dyuproject.protostuff', name: 'protostuff-runtime', version: '1.0.8'
+compile group: 'commons-collections', name: 'commons-collections', version: '3.2.2'
+compile group: 'commons-fileupload', name: 'commons-fileupload', version: '1.3.2'
+compile group: 'commons-io', name: 'commons-io', version: '2.5'
+runtime group: 'mysql', name: 'mysql-connector-java', version: '5.1.37'
+//关于具体的gradle构建，请百度一下。 一般来说在maven仓库里面有gradle引用的代码的，直接拷贝就行
+//可能我们的gradle构建包很难下载，建议直接用迅雷去下载对应的gradle版本，然后把gradle的压缩包放到我们程序的下载目录就可以了。
+```
+
+等项目构建完成后，我们把以前的项目直接把源码和资源文件什么的都直接拷贝过来，对应着目录就行了，然后接着build项目，最后就可以了。
+
+#### 角色控制
+
+前面和读者交流了一下，他们建议在项目中加入角色控制。好吧，我们先看看简单的角色控制。
+
+角色控制，顾名思义就是不同的用户角色依赖于他的身份属性而做出具体的行为控制。具体的行为控制，往往取决于用户界面的操作。而还有一些更加复杂的东西，我们在以后的项目实战中再来阐述。
+
+在这个项目中，我们用户的角色分为以下几类：
+- 超级管理员
+- 出入库人员
+- 仓库管理人员
+- 台账管理（账单汇总）
+
+按照我们以前开发的一些经验来说，我们大概解决方法有下面的几种：
+
+|  用户访问路径  |  举例说明  |
+| ---- | ----|
+| 前端页面设定路径 | 网页顶部的导航栏的操作跳转 |
+| 后端接口控制路径 | 不同职位的用户登录后显示的界面 |
+
+前端界面设置路径，也就是一个a标签写入地址为：http://acheng1314.cn 这样就能实现跳转。
+
+后端接口控制路径，我们还是拿登录接口来说，我们在用户类中加入一个nextUrl字段，说明是下一步的地址，然后我们在控制器中完成写入，如下：
+
+```
+/**
+ * 用户请求相关控制器
+ * <br/>Created by acheng on 2016/9/26.
+ */
+@Controller
+@RequestMapping("/userAction")
+public class UserController {
+
+    @Autowired
+    private UserServiceImpl userService;    //自动载入Service对象
+    private ResponseObj responseObj;
+
+    /**
+     * 为什么返回值是一个ModelAndView，ModelAndView代表一个web页面<br/>
+     * setViewName是设置一个jsp页面的名称
+     *
+     * @param response http响应
+     * @param user     发起请求后，spring接收到请求，然后封装的bean数据
+     * @return 返回一个web页面
+     * @throws Exception
+     */
+    @RequestMapping(value = "/reg"
+            , method = RequestMethod.POST
+            , produces = "application/json; charset=utf-8")
+    @ResponseBody
+    public Object reg(HttpServletRequest request, HttpServletResponse response, User user, HttpSession session) throws Exception {
+        Object result;
+        responseObj = new ResponseObj<User>();
+        if (null == user) {
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("用户信息不能为空！");
+            result = new GsonUtils().toJson(responseObj);
+            return result;
+        }
+        if (StringUtils.isEmpty(user.getLoginId()) || StringUtils.isEmpty(user.getPwd())) {
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("用户名或密码不能为空！");
+            result = new GsonUtils().toJson(responseObj);
+            return result;
+        }
+        if (null != userService.findUser(user)) {
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("用户已经存在！");
+            result = new GsonUtils().toJson(responseObj);
+            return result;
+        }
+        try {
+            userService.add(user);
+        } catch (Exception e) {
+            e.printStackTrace();
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("其他错误！");
+            result = new GsonUtils().toJson(responseObj);
+            return result;
+        }
+        responseObj.setCode(ResponseObj.OK);
+        responseObj.setMsg("注册成功");
+        user.setPwd(session.getId());   //单独设置密码为sessionId 误导黑客，前端访问服务器的时候必须有这个信息才能操作
+        user.setNextUrl(request.getContextPath() + "/mvc/home");    //单独控制地址
+        responseObj.setData(user);
+        session.setAttribute("userInfo", user); //将一些基本信息写入到session中
+        result = new GsonUtils().toJson(responseObj);
+        return result;
+    }
+
+    /**
+     * 登录接口
+     *
+     * @param request
+     * @param user
+     * @return
+     */
+    @RequestMapping(value = "/login"
+            , method = RequestMethod.POST
+            , produces = "application/json; charset=utf-8")
+    @ResponseBody
+    public Object login(HttpServletRequest request, HttpServletResponse response, User user, HttpSession session) throws Exception {
+        Object result;
+        if (null == user) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.EMPUTY);
+            responseObj.setMsg("登录信息不能为空");
+            result = new GsonUtils().toJson(responseObj);
+            return result; //返回json
+        }
+        if (StringUtils.isEmpty(user.getLoginId()) || StringUtils.isEmpty(user.getPwd())) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("用户名或密码不能为空");
+            result = new GsonUtils().toJson(responseObj);
+            return result;
+        }
+        //查找用户
+        User user1 = userService.findUser(user);
+        if (null == user1) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.EMPUTY);
+            responseObj.setMsg("未找到该用户");
+            result = new GsonUtils().toJson(responseObj);
+        } else {
+            if (user.getPwd().equals(user1.getPwd())) {
+                user1.setPwd(session.getId());
+                user1.setNextUrl(request.getContextPath() + "/mvc/home");
+                responseObj = new ResponseObj<User>();
+                responseObj.setCode(ResponseObj.OK);
+                responseObj.setMsg(ResponseObj.OK_STR);
+                responseObj.setData(user1);
+                session.setAttribute("userInfo", user1);
+                result = new GsonUtils().toJson(responseObj);
+            } else {
+                responseObj = new ResponseObj<User>();
+                responseObj.setCode(ResponseObj.FAILED);
+                responseObj.setMsg("用户密码错误");
+                result = new GsonUtils().toJson(responseObj);
+            }
+        }
+        return result;
+    }
+
+}
+
+```
+
+我们前端接收到具体的json数据后，我们解析json数据，并实现相关功能，如下：
+```
+    function webLogin() {
+        if (checkLoginInfo()) {
+            var loginname = $("#u").val();
+            var password = $("#p").val();
+            $.ajax({
+                type: "POST",
+                url: '<%=request.getContextPath()%>/userAction/login',
+                data: {loginId: loginname, pwd: password},
+                dataType: 'json',   //当这里指定为json的时候，获取到了数据后会自己解析的，只需要 返回值.字段名称 就能使用了
+                cache: false,
+                success: function (data) {
+                    if (data.code == 1) {
+                        window.location.href = data.data.nextUrl;   //这里拿到服务器返回的地址，然后进行跳转操作
+                    } else {
+                        alert(data.msg);
+                        $("#u").focus();
+                    }
+                }
+            });
+        }
+    }
+    
+    //其他前端的相关代码省略，具体详情，请查看我们的放出的源码包。
+
+```
+
+#### 拦截器的使用
+拦截器的详细介绍，[请参阅这里](http://blog.csdn.net/tonytfjing/article/details/39207551)，为了节省篇幅，本文不再介绍，只是放出如何使用。
+
+首先，在我们的spring-web.xml中配置拦截器，整体代码如下：
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://www.springframework.org/schema/context
+	http://www.springframework.org/schema/context/spring-context.xsd
+	http://www.springframework.org/schema/mvc
+	http://www.springframework.org/schema/mvc/spring-mvc-3.0.xsd">
+    <!-- 配置SpringMVC -->
+    <!-- 1.开启SpringMVC注解模式 -->
+    <!-- 简化配置：
+        (1)自动注册DefaultAnootationHandlerMapping,AnotationMethodHandlerAdapter
+        (2)提供一些列：数据绑定，数字和日期的format @NumberFormat, @DateTimeFormat, xml,json默认读写支持
+    -->
+    <mvc:annotation-driven/>
+    <!-- 2.静态资源默认servlet配置
+        (1)加入对静态资源的处理：js,gif,png
+        (2)允许使用"/"做整体映射
+     -->
+    <mvc:resources mapping="/css/**" location="/static/css/"/>
+    <mvc:resources mapping="/images/**" location="/static/images/"/>
+    <mvc:resources mapping="/view/**" location="/static/view/"/>
+    <mvc:resources mapping="/js/**" location="/static/js/"/>
+    <mvc:resources mapping="/fonts/**" location="/static/fonts/"/>
+    <mvc:default-servlet-handler/>
+
+    <!-- 访问拦截  -->
+    <mvc:interceptors>
+        <mvc:interceptor>
+            <mvc:mapping path="/**/**"/>
+            <bean class="cn.acheng1314.intercepter.LoginHandlerInterceptor"/>
+        </mvc:interceptor>
+    </mvc:interceptors>
+
+    <!-- 3.配置jsp 显示ViewResolver -->
+    <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+        <property name="viewClass" value="org.springframework.web.servlet.view.JstlView"/>
+        <property name="prefix" value="/WEB-INF/jsp/"/>
+        <property name="suffix" value=".jsp"/>
+    </bean>
+
+    <bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <property name="maxUploadSize" value="10000000"/>
+    </bean>
+
+    <!-- 4.扫描web相关的bean -->
+    <context:component-scan base-package="cn.acheng1314.mvc">
+        <!-- 制定扫包规则 ,只扫描使用@Controller注解的JAVA类 -->
+        <context:include-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+    </context:component-scan>
+
+</beans>
+```
+具体的拦截器代码如下，因为我们已经在代码中加入了注释，所以不需要再次说明什么东西之类的。
+```
+package cn.acheng1314.intercepter;
+
+import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+public class LoginHandlerInterceptor extends HandlerInterceptorAdapter {
+    String NO_INTERCEPTOR_PATH = ".*/((login)|(reg)|(logout)|(code)|(app)|(weixin)|(static)|(main)|(websocket)).*";    //不对匹配该值的访问路径拦截（正则）
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // TODO Auto-generated method stub
+        String path = request.getServletPath();
+        if (path.matches(NO_INTERCEPTOR_PATH)) {    //匹配正则表达式的不拦截
+            return true;
+        } else {    //不匹配的进行处理
+            try {
+                if (request.getSession().getAttribute("userInfo") == null) { //session中是否存在用户信息，不存在则是未登录状态
+                    response.sendRedirect(request.getContextPath() + "/mvc/login");
+                    return false;
+                }
+            } catch (IOException e) {
+                response.sendRedirect(request.getContextPath() + "/mvc/login");
+                e.printStackTrace();
+                return false;
+            }
+        }
+        return true;    //默认是不拦截···当然具体的还看一些需求设计啊  之类的
+    }
+
+}
+
+```
+
+看了下时间，已经是四点过了，今天只能先这样，这两天补一篇列表分页。这段时间很忙，快要毕业了，老师也找做东西，以前的团队项目做不过来也找我，然后还在准备考研的事情咨询，很多很多，望大家理解下，该做的事情，一定会完成，另外以后我们尽量缩短篇幅，但是，更多的是多次发文章，这样的话，相对来说感觉可能稍微舒服点。
+
+---- 
+#### 总结：
+- springMvc拦截器的基本使用
+- 简单的过滤器可以拦截简单的非法请求，防止越界操作
+- gradle比maven更加方便配置
+- 角色控制的简单实现方式
