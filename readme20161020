@@ -1,0 +1,463 @@
+#### 优雅的SpringMvc+Mybatis应用（四）
+
+转眼间文章已经到了第四期了。坚持做一件事，确实是很难的。特别是要不断的转换思维，一个习惯前端开发的人，做什么还是前端的考虑的多一点，后端的架构设计之类的，现在还谈不上，一切稳稳的前进就行了。
+
+关于上一期，本来是投了首页的，后来不知道什么原因没上，检查了一下，也就是推荐了下自己的博客和github，有点惆怅。
+
+#### 工具
+- IDE为**idea15**
+- JDK环境为**1.8**
+- maven版本为**maven3**
+- Mysql版本为**5.5.27**
+- Tomcat版本为**7.0.52**
+- 流程图绘制（xmind）
+
+#### 本期目标
+- 登录注册的简单体验优化
+- 完整的后台主页
+- 前端使用json数据
+- 列表数据分页
+#### 注册登录的简单体验优化
+
+上一期我们**注册登录都成功**了，但是后台主页显示很丑陋，所以这里我换了个主页，但是前面没有注意到的细节又看到了。如下图：
+
+![ssm应用四-注册成功-地址栏错误](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用四-注册成功-地址栏错误.png)
+
+在上面的图中，地址栏显示的地址是前面注册接口的地址，并不是我们常规看到的**xxx/home**这种主页地址。所以我们需要进行优化处理。
+
+同时，我们可以看到我们的Form表单提交的提示信息是在新产生的**ModelAndView**界面里面addObject("字段名",数据)，这样我们的数据都显示到新的界面去了。也就是说前面的设计不合符现在主流的开发思路，用户体验也相对糟糕。我们需要做到在登录界面前端效验数据，同时登录注册的提示信息也是在对应的界面完成的。如下：
+
+![ssm应用四-前端form错误-提示示例](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用四-前端form错误-提示示例.png)
+
+值得注意的是：为了程序执行效率、数据完整性和程序健壮性，我们的前端必须做对应的基础数据效验，后端的控制器必须做所有需要的数据的效验。
+- 前端数据效验我们使用js完成
+- 前端界面样式是由CSS完成
+- 网络请求采用异步请求，具体的实现是使用的ajax完成
+- js获取web页面数据统一使用标签的ID，格式为：**$("#标签ID")**
+- web页面标签最好一个标签一行，这样代码看起来更加舒服
+
+我们先重构登录页面：
+首先，我不擅长写web页面，我能做的也就是少量的修改，CSS和js本身不是我的强项，需要大量的时间来磨合。
+
+所以，我选择了在网上找web界面，然后自己做少量的修改，同时一些简单的小控件我也从网络获取资源来解决需要，**合理的查找资源是最快的学习方法**。
+
+登录页面重构目标：
+- web前端完成基本的数据效验
+- 数据效验完成后，有基本的对应提示。如上面登录界面的小标签。
+- 异步登录
+- 后端接口返回数据为json
+- 前端页面解析json控制程序流转
+
+首先，按照上面的提示，我们可以知道的是前端页面上面的基本数据效验是要使用js完成的，同时js中获取web页面标签的数据是需要使用标签的ID完成，简单的示例如下：
+
+```
+<script type="text/javascript">
+    function webLogin() {   //定义一个名为webLogin的js函数（在java中我们称呼函数为方法）
+        var loginname = $("#u").val();  
+        //var是申明一个变量的关键字，loginname为变量名，
+        //$("#u")是找到一个标签ID为"u"的标签，.val() 是获取对应ID标签的值
+        if ("" == loginname) {  //u标签的值为空
+            //只有通过 $("#u") 的形式才能获取一个标签。
+            $("#u").tips({  // .tips 是js提示标签的调用方法，具体的轮廓如上面的登陆页面的提示标签
+                side: 2,    
+                msg: '用户名不得为空',  //提示的信息
+                bg: '#AE81FF',  //背景色
+                time: 3 //呈现的时间
+            });
+            $("#u").focus();    //让u标签获取输入焦点
+            return false;   //返回false，打断js的执行
+        }
+        
+        var loginpwd = $("#p").val();  
+        if (loginpwd == "") {
+            $("#p").tips({
+                side: 2,
+                msg: '密码不得为空',
+                bg: '#AE81FF',
+                time: 3
+            });
+            $("#p").focus();
+            return false;
+        }
+        
+        $.ajax({    //使用jquery下面的ajax开启网络请求
+                type: "POST",   //http请求方式为POST
+                url: '<%=request.getContextPath()%>/userAction/login',  //请求接口的地址
+                data: {loginId: loginname, pwd: loginpwd},  //存放的数据，服务器接口字段为loginId和pwd，分别对应用户登录名和密码
+                dataType: 'json',   //当这里指定为json的时候，获取到了数据后会自动解析的，只需要 返回值.字段名称 就能使用了
+                cache: false,   //不用缓存
+                success: function (data) {  //请求成功，http状态码为200。返回的数据已经打包在data中了。
+                    if (data.code == 1) {   //获判断json数据中的code是否为1，登录的用户名和密码匹配，通过效验，登陆成功
+                        window.location.href = "<%=request.getContextPath()%>/mvc/home";    //跳转到主页
+                    } else {    //登录不成功
+                        alert(data.msg);    //弹出对话框，提示返回的错误信息
+                        $("#u").focus();
+                    }
+                }
+            });
+    }
+</script>
+```
+
+上面的注释已经能很明显的看出我们的 **前端效验、网络请求和js解析json**，下面我们在前端页面中调用这个js，如下：
+```
+<form action=""     //此处必须删掉form表单的地址
+    name="loginform"
+    accept-charset="utf-8" 
+    id="login_form" 
+    class="loginForm"
+    method="post">
+        <input type="hidden" name="did" value="0"/>
+        <input type="hidden" name="to" value="log"/>
+        
+        <div class="uinArea" id="uinArea">
+            <label class="input-tips" for="u">帐号：</label>
+            <div class="inputOuter" id="uArea">
+                <input type="text" id="u" name="loginId" class="inputstyle"/>
+            </div>
+        </div>
+        
+        <div class="pwdArea" id="pwdArea">
+            <label class="input-tips" for="p">密码：</label>
+            <div class="inputOuter" id="pArea">
+                <input type="password" id="p" name="pwd" class="inputstyle"/>
+            </div>
+        </div>
+        
+        <div style="padding-left:50px;margin-top:20px;">
+            <input type="button"
+               id="btn_login"
+               value="登 录"
+               onclick="webLogin();"    //此处调用我们上面写的js的登录方法
+               style="width:150px;"
+               class="button_blue"/>
+        </div>
+</form>
+```
+
+上面就是web中调用js的简单实现，注意的是，**FORM表单必须删除action的值，在点击后需要触发对应事件的地方调用js**。
+
+当然，我们的前端页面完成后，我们必须在后端接口处，做出对应的修改，让他符合我们前端的调用规则。后端修改如下：
+```
+/**
+ * 用户请求相关控制器
+ * <br/>Created by acheng on 2016/9/26.
+ */
+@Controller //标明本类是控制器
+@RequestMapping("/userAction")  //外层地址
+public class UserController {
+
+    @Autowired
+    private UserServiceImpl userService;    //自动载入Service对象
+    private ResponseObj responseObj;    //返回json数据的实体
+    
+    /**
+     * 登录接口，因为json数据外层一般都是Object类型，所以返回值必须是Object<br/>
+     *  这里的地址是： 域名/userAction/login
+     *
+     * @param req
+     * @param user
+     * @return
+     */
+    @RequestMapping(value = "/login"    //内层地址
+            , method = RequestMethod.POST   //限定请求方式
+            , produces = "application/json; charset=utf-8") //设置返回值是json数据类型
+    @ResponseBody
+    public Object login(HttpServletRequest req, User user) {
+        Object result;
+        if (null == user) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.EMPUTY);
+            responseObj.setMsg("登录信息不能为空");
+            result = new GsonUtils().toJson(responseObj);   //通过gson把java bean转换为json
+            return result; //返回json
+        }
+        if (StringUtils.isEmpty(user.getLoginId()) || StringUtils.isEmpty(user.getPwd())) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("用户名或密码不能为空");
+            result = new GsonUtils().toJson(responseObj);
+            return result;
+        }
+        //查找用户
+        User user1 = userService.findUser(user);
+        if (null == user1) {
+            responseObj = new ResponseObj<User>();
+            responseObj.setCode(ResponseObj.EMPUTY);
+            responseObj.setMsg("未找到该用户");
+            result = new GsonUtils().toJson(responseObj);
+        } else {
+            if (user.getPwd().equals(user1.getPwd())) {
+                responseObj = new ResponseObj<User>();
+                responseObj.setCode(ResponseObj.OK);    //登录成功，状态为1
+                responseObj.setMsg(ResponseObj.OK_STR);
+                responseObj.setData(user1); //登陆成功后返回用户信息
+                result = new GsonUtils().toJson(responseObj);
+            } else {
+                responseObj = new ResponseObj<User>();
+                responseObj.setCode(ResponseObj.FAILED);
+                responseObj.setMsg("用户密码错误");
+                result = new GsonUtils().toJson(responseObj);
+            }
+        }
+        return result;
+    }
+}
+```
+注意：如果为了返回数据为json，那么我们需要设定某个方法对应的注解为：**@ResponseBody** 。 否则会**产生404错误**！
+
+我们通过上面的重构可以明白以下几点：
+- 前端
+    - js实现基本的数据效验
+    - js发起网络请求
+    - ajax发起网络请求，返回类型设置json能自动解析
+    - js获取页面控件
+    - 页面控件调用js
+    - js获取解析后的json数据的值，进行程序流转控制
+- 后端：
+    - 后端控制器必须申明
+    - 后端的地址必须配置
+    - 每个地址返回的数据类型要匹配
+    - 返回json数据，方法上面必须配置：**@ResponseBody**
+    - 可以使用工具类来方便开发
+----
+#### 后台主页→个人信息修改
+
+上期我们可以看到，我们的登录和注册都是已经OK了。现在我们登录和注册成功后，我们都让他跳转到主页去。同时完善登录和注册的错误提示页面。
+
+一般来说，大家更喜欢看到登录成功后的主页界面，毕竟大多数人都是有喜新厌旧之嫌。我也是一样的。哈哈。
+
+为了程序的执行逻辑，考虑后端需求都不是那么单一，我们先做一些公共的建设。比如说用户信息修改现实之类的。如下图：
+
+![ssm应用四-后台主页-修改个人信息](http://acheng1314.cn/wp-content/uploads/2016/10/ssm应用四-后台主页-修改个人信息.png)
+
+如上图所示，我们需要一个可以弹出的对话框，我去百度了一下，那个[“妹子UI”](http://note.youdao.com/)还是很受人欢迎，所以就集成进来了。
+
+我们选取一个比较喜欢的后端主页，然后把对应的资源放入到对应的文件目录（js、css、images等），需要新加入的资源如果在以前的目录中没有的话，那么我们需要在里面进行配置。比如说这里我加入了字体文件，那么我现在需要先把字体文件指定目录为：
+
+    static/font/
+
+目录指定后我需要在Spring的配置文件，spring-web.xml中配置静态资源的目录如下：
+
+    <mvc:resources mapping="/fonts/**" location="/static/fonts/"/>
+
+剩下的就是写好jsp页面(Copy+Pause+修改资源文件路径)。然后我们在Controller中配置好路径
+
+    /**
+     * 后台主页
+     *
+     * @return
+     */
+    @RequestMapping(value = "/home", method = RequestMethod.GET)
+    public String home() {
+        return "home";
+    }
+
+这样子配置好了后，我们就可以直接用“域名/mvc/home”来访问我们的主页了。同时按照上面的设置，我们登录成功后，直接解析json确认用户登录成功，然后前端使用js来进行页面跳转，如：
+
+```
+window.location.href = "<%=request.getContextPath()%>/mvc/home";    //跳转到主页
+```
+
+这样，我们就能修复上面说道的页面和地址显示不匹配的问题。
+
+同时，通过上面的可以看出，我们在jsp页面中，纯粹没加入任何jsva代码，全是使用的前端+接口实现的功能。我们这样做，以后维护和重构中也能降低一部分压力。
+
+言归正传，我们这里主要是想做一个**个人信息修改**的功能。首先我们进行功能和业务流程分析。
+
+功能和业务流程分析：
+- 1.web点击头像显示修改信息对话框。
+- 2.根据后端定义的用户信息表，得出用户信息修改需要填写的资料。
+- 3.用户上传个人资料，上传之前前端必须先进行基础信息验证。
+- 4.用户个人信息验证通过后，上传到服务器。（重点）
+- 5.服务器接收上传的信息，进行存储，并返回修改结果。（重点）
+
+从上面我们可以看到我画出两个重点，而且这两个重点都是java web避免不了事情。为什么这样说呢？
+
+- 1.任何一个动态的web服务器都免不了数据资料的更新，数据资料更新一般分为两种。
+    - 有文件的信息上传
+    - 无文件的信息上传
+- 2.可能其他童鞋看到http请求的方法有很多种，但是一般来说get和post我们能做出任何的操作。
+- 3.在大量数据的服务器中，考虑到很多因素（历史记录查询、数据库增量等），一般不会进行真正的物理数据删除，一般都是通过控制输出来实现的。（实战经验，血泪教训，切记）
+
+现在我们开始实现对话框：
+
+打开[“妹子UI”的js插件页面](http://amazeui.org/javascript)，我们找到[模态窗口相关的文档](http://amazeui.org/javascript/modal)，在“模拟 Prompt”这里，我们可以看到具体的对话框的实现和调用如下：
+
+```
+<!--这是html代码-->
+<button
+  type="button"
+  class="am-btn am-btn-success"
+  id="doc-prompt-toggle">
+  Prompt
+</button>
+
+<div class="am-modal am-modal-prompt" tabindex="-1" id="my-prompt">
+  <div class="am-modal-dialog">
+    <div class="am-modal-hd">Amaze UI</div>
+    <div class="am-modal-bd">
+      来来来，吐槽点啥吧
+      <input type="text" class="am-modal-prompt-input">
+    </div>
+    <div class="am-modal-footer">
+      <span class="am-modal-btn" data-am-modal-cancel>取消</span>
+      <span class="am-modal-btn" data-am-modal-confirm>提交</span>
+    </div>
+  </div>
+</div>
+
+<!--这是js调用-->
+$(function() {
+  $('#doc-prompt-toggle').on('click', function() {  //在这里设定上面的按钮的点击函数
+    $('#my-prompt').modal({ //显示ID为my-prompt的窗口
+      relatedTarget: this,
+      onConfirm: function(e) {  //窗口的确定按钮的响应事件
+        alert('你输入的是：' + e.data || '')
+      },
+      onCancel: function(e) {   //取消按钮的响应事件
+        alert('不想说!');
+      }
+    });
+  });
+});
+```
+
+关于上面的相关代码，我们需要引入妹子UI后才能使用！！！接下来我们需要改造成符合我们实际需求的界面，如下：
+```
+<!--这里是html代码-->
+<div class="am-modal am-modal-prompt" tabindex="-1" id="my-prompt">
+    <div class="am-modal-dialog">
+        <div class="am-modal-hd">用户信息修改</div>
+        <div class="am-modal-bd">
+            <form enctype="multipart/form-data" accept-charset="UTF-8">
+                姓名：
+                <input type="text" class="am-modal-prompt-input" id="changeName">
+
+                性别：
+                <input type="text" class="am-modal-prompt-input" id="changeSex">
+
+                手机号：
+                <input type="text" class="am-modal-prompt-input" id="changeCell">
+
+                年龄：
+                <input type="text" class="am-modal-prompt-input" id="changeAge">
+
+                头像：
+                <div class="am-modal-prompt-input">
+
+                    <input type="file" name="file"
+                           id="changeHeadPic" size="28"/>
+
+                </div>
+            </form>
+        </div>
+        <div class="am-modal-footer">
+            <span class="am-modal-btn" data-am-modal-cancel>取消</span>
+            <span class="am-modal-btn" data-am-modal-confirm>上传</span>
+        </div>
+    </div>
+</div>
+
+<!--下面是js代码-->
+    var fileName;
+    <!--文件上传这里加入了js插件：jquery.ajaxfileupload.js-->
+    function uploadFile() {
+        //这里应该加入Loading 窗口开启
+        fileName = document.getElementById('changeHeadPic').value;
+        $.ajaxFileUpload({
+            url: "<%=request.getContextPath()%>/userAction/uploadHeadPic",
+            secureuri: false, //是否需要安全协议，一般设置为false
+            fileElementId: 'changeHeadPic', //文件上传域的ID
+            dataType: 'json', //返回值类型 一般设置为json
+            contentType: "application/x-www-form-urlencoded; charset=utf-8",
+            success: function (data) {
+                alert(data.msg);
+                //先根据返回的code确定文件是否上传成功
+                //文件上传失败，直接弹出错误提示，根据错误进行相应的事物处理（关闭Loading窗口，弹出提示对话框）
+                //文件上传成功后，继续现实loading窗口，接着执行上传表单信息等事物
+            }
+
+        });
+    }
+
+    function changeUserInfo() { //显示个人信息修改窗口
+        $('#my-prompt').modal({
+            relatedTarget: this,
+            onConfirm: function () {
+                uploadFile();   //调用上面的文件上传函数
+            },
+            onCancel: function (e) {
+            }
+        });
+    }
+    
+
+```
+
+上面的代码，我们完成了控制窗口显示的函数，完成了修改个人信息界面的构建。现在我们需要的是找到执行程序入口。按照我的习惯，肯定是找到头像控件，然后设置点击事件为上面的changeUserInfo()。实现如下：
+
+```
+<!--下面是头像的html代码，在头像控件后面的点击事件上面添加上函数就行了。-->
+<div class="user-img">
+    <img src="/static/images/avatar-1.jpg" alt="user-img" title="Mat Helme"
+         class="img-circle img-thumbnail img-responsive" onclick="changeUserInfo()">    <!--在这里添加onclick方法的值为：changeUserInfo()-->
+        <div class="user-status offline">
+            <i class="am-icon-dot-circle-o" aria-hidden="true"></i>
+        </div>
+</div>
+```
+
+好的，上面我们可以看到我的前端界面代码基本上完成了。接下来，我们需要在我们后端上面写上对应的程序接口，实现功能即可。
+
+本来计划文件上传单独使用commons-fileupload和commons-io完成的，毕竟这是在Servelt上面的老套路，但是我发现Spring里面已经考虑到这一点，有新的东西来完成，所以就使用了Spring的实现方式。具体代码如下：
+```
+    //我们在UserController这个控制器里添加这个方法
+    @RequestMapping(value = "/uploadHeadPic"
+            , method = RequestMethod.POST
+            , produces = "application/json; charset=utf-8")
+    @ResponseBody
+    public Object uploadHeadPic(@RequestParam(required = false) MultipartFile file, HttpServletRequest request) {
+        //在这里面文件存储的方案一般是：收到文件→获取文件名→在本地存储目录建立防重名文件→写入文件→返回成功信息
+        //如果上面的步骤中在结束前任意一步失败，那就直接失败了。
+        if (null == file || file.isEmpty()) {
+            responseObj = new ResponseObj();
+            responseObj.setCode(ResponseObj.FAILED);
+            responseObj.setMsg("文件不能为空");
+            return new GsonUtils().toJson(responseObj);
+        }
+        responseObj = new ResponseObj();
+        responseObj.setCode(ResponseObj.OK);
+        responseObj.setMsg("文件长度为：" + file.getSize());
+        return new GsonUtils().toJson(responseObj);
+    }
+```
+完成了上面的方法后，我们觉得应该是没问题了，毕竟这样一个接口来接受请求是没问题的嘛，是的，我也是这么认为的。
+
+但是现实的打脸是很严重的，因为按照这么写后，**我无论如何都收不到文件（文件一直为null）**，Why？我的思路是正确的啊。经过我的仔细查找，发现我的Spring的配置文件中，没有添加文件的支持设置，所以我们又得补充配置文件，spring-web.xml新增配置如下：
+```
+    <bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <!--下面设置的是上传文件的最大大小-->
+        <property name="maxUploadSize" value="10000000"/>   
+    </bean>
+```
+
+经过上面的一番折腾，我们发现框架这个东西，也不是一劳永逸的，毕竟很多东西需要不断的增加。
+
+总结：
+- 任何东西都需要根据需求不断的变化，可增可减，张弛有度。
+- Spring接收文件上传时，Controller的具体方法的参数前面插入注解，同时数据类型是MultipartFile。
+- 引入第三方资源的时候，必须查看文档，根据说明文档好办事。
+- js进行前端流程控制，后端接口隔离，前后端解耦。
+----
+前两天刮台风，停电导致数据丢失，是个很尴尬的事情，拖慢了进度。同时，朋友遇到点问题，我在开导他。文章写到现在也是凌晨4点过了，本期计划的列表分页也没做，很对不起大家对我的期待。真诚的说一声：对不起。对不起你们的期待。
+
+给朋友开导的时候，我也总结了下做人做事：**随心、追梦、勇敢、独行**。希望有心做事的，都用这几句话勉励自己吧。
+
+前行的路上不只是孤独，还有满山的鲜花，更有远方和诗。
+
+----
+#### 下期预告：
+- 列表分页
+- 简易用户角色控制
+- 拦截器的使用
